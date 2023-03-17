@@ -279,6 +279,9 @@ class TTSCog(commands.Cog):
             'エモジ': r"\<\:.*\>",
             'メンション': r"\<\@\d*\>",
         }
+        match = re.search(r"(\D)\1{4,}", res) # 5文字以上の文字の繰り返しは4文字にする
+        if match:
+            res = res.replace(match.group(0),match.group(0)[:4])
         for new, pat in replaces.items():
             res = re.sub(pat, new, res)
         eng = re.findall(r'[a-zA-Z]*',res)
