@@ -8,6 +8,22 @@ VoiceVoxを利用する読み上げBotです。
 
 VoiceVoxは別途立ち上げるか、exeがあるディレクトリを設定する必要があります。
 
+## 機能
+
+VoiceVoxが立ち上がってない状態でbot.pyを立ち上げるとVoiceVox.exeがあるディレクトリをconfig.iniに設定していればそこからVoiceVox.exeを実行します。
+
+{command_prefix}helpでコマンドのヘルプを表示します。
+
+/vc join でvcに参加　/vc leave でvcから退出。
+
+ボイスチャンネルにBot以外のユーザーがいなくなると自動で退出します。
+
+/set_voice コマンドを入力し、speaker_idにカーソルを合わせるとVoiceVoxで使用できる話者の候補を表示。
+speaker_idを入力した状態でstyle_idにカーソルを合わせるとその話者で使用できるスタイルの候補を表示。
+同時にピッチ、スピード、ボリュームを入力可能（任意入力）。
+
+/voice を実行するとコマンドの実行者に現在割り当てられている話者を表示。
+
 # Usage
 
 必要なパッケージやVoiceVoxをインストールしたら、config.iniの必要な項目を入力してbot.pyを実行してください。
@@ -58,6 +74,8 @@ data/<guild_id>.json
 * 使用パッケージはrequirements.txtに記載
 
 # Note
+
+リポジトリを公開するのは初めてなので至らぬ点もあると思いますが、もし問題や提案があればGitHubの機能やDiscordのアカウント（田中 #2763）にDMしてください。
 
 ## 実装出来たら良いなと思うもの
 
