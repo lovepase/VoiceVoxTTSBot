@@ -1,0 +1,6 @@
+alkana==0.0.3
+discord==2.2.2
+discord.py==2.2.2
+pathlib==1.0.1
+PyNaCl==1.5.0
+requests==2.28.2
