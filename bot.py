@@ -1,8 +1,9 @@
 from discord.ext import commands
-from discord import Colour, Embed, Intents, Game, Status, TextChannel, User
+from discord import Colour, Embed, Intents, Game, Status, TextChannel
 
 import os, time, socket, asyncio
 import configparser
+import subprocess
 
 from logger import Logger
 from typing import Union
@@ -16,6 +17,7 @@ environment = 'DEVELOPMENT'
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8')
 
+# helpコマンド
 class MyHelpCommand(commands.HelpCommand):
     async def send_bot_help(self, mapping) -> None:
         prefix = bot.command_prefix
@@ -40,6 +42,8 @@ class TTSBot(commands.Bot):
         self.utils = Utils()
         super().__init__(command_prefix=self.prefix, intents=Intents.all(), help_command=MyHelpCommand())
 
+    # 以下このクラス限定の返信機能等
+
     async def addReaction(self, ctx, reaction: str, message: str = None):
         if ctx.interaction == None:
             return await ctx.message.add_reaction(reaction)
@@ -50,12 +54,14 @@ class TTSBot(commands.Bot):
             return await ctx.channel.send(message, silent=True)
         return await ctx.send(message, silent=True)
     
-    async def sendEmbed(self, ctx: Union[commands.Context, TextChannel], title: str, user: User = None):
+    async def sendEmbed(self, ctx, title: str, *, sendTo : Union[commands.Context, TextChannel] = None, ephemeral = False):
+        if sendTo is not None:
+            ctx = sendTo
         embed = Embed(title=title,color=Colour.dark_gold())
-        if user is not None:
-            if type(ctx) == commands.Context and ctx.interaction is not None:
-                return await ctx.send(embed=embed, silent=True, ephemeral=True)
-        return await ctx.send(embed=embed, silent=True)
+        if type(ctx) == commands.Context:
+            return await ctx.send(embed=embed, silent=True, ephemeral=ephemeral)
+        else:
+            return await ctx.send(embed=embed, silent=True, ephemeral=ephemeral)
 
 bot = TTSBot(config=config[environment])
 bot.logger = Logger.logger("TTSBot")
@@ -89,11 +95,11 @@ def isConnectable(host, port) -> bool:
 def app_execute(host, port, interval=1.,retries=5):
     voicevox_dir = config[environment].get('VOICEVOX_DIR')
     if voicevox_dir is None:
-        bot.logger.error('VOICEVOXのパスが設定されていません（VOICEVOXを起動した状態で実行するかconfig.ini に VOICEVOX_DIR = <VOICEVOX.exeがあるディレクトリ> を設定してください）')
+        bot.logger.error('VOICEVOXのパスが設定されていません（VOICEVOXを起動した状態で実行するかconfig.ini に VOICEVOX_DIR = <VOICEVOXのディレクトリ> を設定してください）')
         raise FileNotFoundError()
-    path = Path(voicevox_dir) / "VOICEVOX.exe"
+    path = Path(voicevox_dir) / "run.exe"
     if path.exists():
-        os.system(f'powershell -Command "{path.absolute()}"')
+        subprocess.Popen(['start', path.absolute()], shell=True)
     else:
         bot.logger.error('パスが見つかりませんでした')
         raise FileNotFoundError()
@@ -116,9 +122,10 @@ if __name__ == '__main__':
     if host not in hostok:
         bot.logger.warning(f"ホストは{','.join(hostok)}のどれかに設定してください")
     if not isConnectable(host, port):
-        bot.logger.info('config.iniのパスをもとにVOICEVOXを起動します')
+        bot.logger.info('config.iniのパスをもとにVOICEVOXのエンジンを起動します')
         app_execute(host, port)
     if TOKEN is None or 'TOKEN' in TOKEN:
         TOKEN = input('Botのトークンを入力してください。(config.iniに TOKEN = <Discord TOKEN> を設定することで次回からの入力をスキップ出来ます。)')
+        config.set(environment, "TOKEN", TOKEN)
     asyncio.run(load_cogs())
     bot.run(TOKEN)
