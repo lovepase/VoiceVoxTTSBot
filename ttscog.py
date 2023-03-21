@@ -1,5 +1,6 @@
 import io, re
 
+import discord
 from discord import app_commands
 from discord.ext import commands
 from discord.ext.commands import Context
@@ -7,7 +8,7 @@ from discord.ext.commands import Context
 from discord import Interaction, VoiceClient
 from discord import PCMAudio
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from pathlib import Path
 import random, math, asyncio
 import alkana
@@ -164,7 +165,7 @@ class TTSCog(commands.Cog):
         data = ExtraData.get_by_psv(pitch=pitch, speed=speed, volume=volume)
         extra_text = data.extractText()
         self._user_extra_dic[ctx.author.id] = data.extract()
-        return await self.bot.sendEmbed(ctx, f"{speaker_name} {extra_text}に設定しました")
+        return await self.bot.sendEmbed(ctx, f"{speaker_name} {extra_text} に設定しました")
 
 
     @commands.hybrid_command(
@@ -172,10 +173,13 @@ class TTSCog(commands.Cog):
         description='display your voice',
     )
     async def voice(self, ctx: Context):
+        await self.voiceInfo(ctx)
+
+    async def voiceInfo(self, ctx:Context, *, sendTo: Union[discord.TextChannel, Context] = None, prefix = '', suffix = ''):
         speaker_id = self.user_voice(ctx.author.id, ctx.guild.id)
         speaker_name = self.speakerIDs[speaker_id]
         extra_text = ExtraData(self._user_extra_dic.get(ctx.author.id)).extractText()
-        return await self.bot.sendEmbed(ctx, f"{speaker_name} {extra_text}", ctx.author)
+        return await self.bot.sendEmbed(ctx, prefix + f"{speaker_name} {extra_text}" + suffix, sendTo=sendTo)
 
     @commands.hybrid_group(
         name='vc',
@@ -195,6 +199,8 @@ class TTSCog(commands.Cog):
         connecting_channelIDs = [voice_client.channel.id for voice_client in self.bot.voice_clients]
         if channel in connecting_channelIDs:
             return await self.bot.sendEmbed(ctx, "既にボイスチャンネルに参加しています")
+        for member in channel.members:
+            self.voicevox.ready(self.user_voice(member.id, member.guild)) # vcに入った時点で既にいたユーザーに割り振り
         self._channelIDs.append(ctx.channel.id)
         self._user_voice_dic[ctx.guild.id] = self.utils.FileUtil.read_by_guild(self.path, ctx.guild.id)
         return await channel.connect(), await self.bot.sendEmbed(ctx, "ボイスチャンネルに接続しました")
@@ -221,31 +227,31 @@ class TTSCog(commands.Cog):
             return
         if message.channel.id not in self._channelIDs:
             return
-        speaker_id, isNew = self.user_voice(message.author.id, message.guild.id, out=True)
-        if isNew:
-            await self.bot.sendEmbed(message.channel, f"{self.speakerIDs[speaker_id]}に設定しました")
+        speaker_id = self.user_voice(message.author.id, message.guild.id)
         text = self.text_format(message.content)
         extra = self._user_extra_dic.get(message.author.id, {})
         que = self.queue[message.guild.voice_client.session_id]
         que.put_nowait((text, speaker_id, extra))
         await que.play_queue()
     
+    # vcから抜けたり入ったり別のvcに入ったとき呼ばれる
     @commands.Cog.listener(name='on_voice_state_update')
-    async def on_voice_state_update(self, member, before, after):
+    async def on_voice_state_update(self, member: discord.Member, before, after):
         connecting_channelIDs = [v.channel.id for v in self.bot.voice_clients]
+        text_channel = [m for id in self._channelIDs if (m := member.guild.get_channel(id))][0]
         if after.channel is None and before.channel.id in connecting_channelIDs: #VCから離脱
             voice_client = [v for v in self.bot.voice_clients if v.channel.id == before.channel.id][0]
             if not member.bot:
                 members = [m for m in before.channel.members if not m.bot]
                 if 0 == len(members):
-                    text_channel = [m for id in self._channelIDs if (m := member.guild.get_channel(id))][0]
-                    await voice_client.disconnect(), await self.bot.sendEmbed(text_channel, "誰もいなくなったので退出しました")
+                    await voice_client.disconnect(), await self.bot.sendEmbed(None, "誰もいなくなったので退出しました", sendTo=text_channel)
         elif before.channel is None and after.channel.id in connecting_channelIDs: #VCに参加
             voice_client = [v for v in self.bot.voice_clients if v.channel.id == after.channel.id][0]
             if member.bot and member.id == self.bot.user.id: #参加したのが自分
                 self.queue[voice_client.session_id] = AudioQueue(self, voice_client)
             elif not member.bot:
-                self.voicevox.ready(self.user_voice(member.id, member.guild, out=True))
+                self.voicevox.ready(self.user_voice(member.id, member.guild))
+                await self.voiceInfo(None, self.user_voice(member.id, member.guild), sendTo=text_channel, suffix="に設定しました")
 
     def user_voice(self, user_id: int, guild_id: int, out: bool = False) -> int:
         flag = False
