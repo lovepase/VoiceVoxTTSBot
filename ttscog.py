@@ -251,7 +251,7 @@ class TTSCog(commands.Cog):
                 self.queue[voice_client.session_id] = AudioQueue(self, voice_client)
             elif not member.bot:
                 self.voicevox.ready(self.user_voice(member.id, member.guild))
-                await self.voiceInfo(None, self.user_voice(member.id, member.guild), sendTo=text_channel, suffix="に設定しました")
+                await self.voiceInfo(None, self.user_voice(member.id, member.guild), sendTo=text_channel, prefix="", suffix="に設定しました")
 
     def user_voice(self, user_id: int, guild_id: int, out: bool = False) -> int:
         flag = False
