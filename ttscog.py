@@ -1,3 +1,4 @@
+from ctypes import util
 import io, re
 
 import discord
@@ -13,7 +14,10 @@ from pathlib import Path
 import random, math, asyncio
 import alkana
 
+from utils import Utils
 from connection import VoiceVox
+
+utils = Utils()
 
 class AudioQueue(asyncio.Queue):
     def __init__(self, tts, voice_client) -> None:
@@ -72,7 +76,6 @@ class ExtraData():
 
 class TTSCog(commands.Cog):
     def __init__(self, bot):
-        self.path: Path = Path('./data')
         self.bot = bot
         self.queue: Dict[AudioQueue] = {}
         self._channelIDs: List[int] = []
@@ -82,7 +85,6 @@ class TTSCog(commands.Cog):
         self._user_voice_dic : Dict[int, Dict] = {}
         self._user_extra_dic = {}
         self._commandNames: List[str] = [c.name for c in self.get_commands()]
-        self.utils = self.bot.utils
         super().__init__()
 
     async def speaker_autocomplete(self, interaction: Interaction, cor: str) -> List[app_commands.Choice[int]]:
@@ -200,9 +202,11 @@ class TTSCog(commands.Cog):
         if channel in connecting_channelIDs:
             return await self.bot.sendEmbed(ctx, "既にボイスチャンネルに参加しています")
         for member in channel.members:
-            self.voicevox.ready(self.user_voice(member.id, member.guild)) # vcに入った時点で既にいたユーザーに割り振り
+            if member.bot:
+                continue
+            self.voicevox.ready(self.user_voice(member.id, member.guild.id)) # vcに入った時点で既にいたユーザーに割り振り
         self._channelIDs.append(ctx.channel.id)
-        self._user_voice_dic[ctx.guild.id] = self.utils.FileUtil.read_by_guild(self.path, ctx.guild.id)
+        self._user_voice_dic[ctx.guild.id] = utils.FileUtil.read_by_guild(ctx.guild.id)
         return await channel.connect(), await self.bot.sendEmbed(ctx, "ボイスチャンネルに接続しました")
     
     @vc.command(
@@ -228,7 +232,7 @@ class TTSCog(commands.Cog):
         if message.channel.id not in self._channelIDs:
             return
         speaker_id = self.user_voice(message.author.id, message.guild.id)
-        text = self.text_format(message.content)
+        text = self.text_format(message)
         extra = self._user_extra_dic.get(message.author.id, {})
         que = self.queue[message.guild.voice_client.session_id]
         que.put_nowait((text, speaker_id, extra))
@@ -238,7 +242,7 @@ class TTSCog(commands.Cog):
     @commands.Cog.listener(name='on_voice_state_update')
     async def on_voice_state_update(self, member: discord.Member, before, after):
         connecting_channelIDs = [v.channel.id for v in self.bot.voice_clients]
-        text_channel = [m for id in self._channelIDs if (m := member.guild.get_channel(id))][0]
+        text_channel = [m for i in self._channelIDs if (m := member.guild.get_channel(i))][0]
         if after.channel is None and before.channel.id in connecting_channelIDs: #VCから離脱
             voice_client = [v for v in self.bot.voice_clients if v.channel.id == before.channel.id][0]
             if not member.bot:
@@ -250,13 +254,13 @@ class TTSCog(commands.Cog):
             if member.bot and member.id == self.bot.user.id: #参加したのが自分
                 self.queue[voice_client.session_id] = AudioQueue(self, voice_client)
             elif not member.bot:
-                self.voicevox.ready(self.user_voice(member.id, member.guild))
+                self.voicevox.ready(self.user_voice(member.id, member.guild.id))
 
     def user_voice(self, user_id: int, guild_id: int, out: bool = False) -> int:
         flag = False
         user_id = str(user_id)
         if guild_id not in self._user_voice_dic.keys():
-            self._user_voice_dic[guild_id] = self.utils.FileUtil.read_by_guild(self.path, guild_id)
+            self._user_voice_dic[guild_id] = utils.FileUtil.read_by_guild(guild_id)
         if user_id not in self._user_voice_dic[guild_id].keys():
             self.set_user_voice(user_id, guild_id)
             flag = True
@@ -267,7 +271,7 @@ class TTSCog(commands.Cog):
     def set_user_voice(self, user_id: int, guild_id: int, val: int = -1) -> None:
         user_id = str(user_id)
         if guild_id not in self._user_voice_dic.keys():
-            self._user_voice_dic[guild_id] = self.utils.FileUtil.read_by_guild(self.path, guild_id)
+            self._user_voice_dic[guild_id] = utils.FileUtil.read_by_guild(guild_id)
         
         if val < 0:
             name = random.choice(list(self.speakers.keys()))
@@ -275,10 +279,10 @@ class TTSCog(commands.Cog):
             val = self.speakers[name][style]
         
         self._user_voice_dic[guild_id][user_id] = val
-        self.utils.FileUtil.save_by_guild(self._user_voice_dic[guild_id], guild_id, self.path)
+        utils.FileUtil.save_by_guild(self._user_voice_dic[guild_id], guild_id)
 
-    def text_format(self, message: str) -> str:
-        res = message
+    def text_format(self, message: discord.Message) -> str:
+        res = message.content
         replaces = {
             'ユーアールエル': r"(https?|ftp)(:\/\/[-_\.!~*\'()a-zA-Z0-9;\/?:\@&=\+\$,%#]+)",
             'エモジ': r"\<\:.*\>",
@@ -294,7 +298,96 @@ class TTSCog(commands.Cog):
             new = alkana.get_kana(e)
             if e and new:
                 res = res.replace(e, new)
+        dic = utils.FileUtil.read_by_guild(message.guild.id).get('Dictionary',{})
+        for k, v in dic.items():
+            res = res.replace(k,v)
         return res
 
+class DictCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.hybrid_group(name='dictionary', aliases=['dic','d','dict'])
+    async def dictionary(self, ctx: Context):
+        return
+    
+    @dictionary.command(name='help')
+    async def help(self, ctx: Context):
+        embed = discord.Embed(
+            title="Dictionary Help",
+            color=discord.Colour.gold(),
+            description=f'単語と読みを追加できます'
+        )
+        embed.add_field(name=f'/dictionary add <単語> <読み> または /d add <単語> <読み>',value='辞書に単語と読みを追加します',inline=False)
+        embed.add_field(name=f'/dictionary remove <単語> または /d remove <単語>', value='辞書から単語を削除します',inline=False)
+        embed.add_field(name=f'/dictionary modify <単語> <読み> または /d modify <単語> <読み>',value='単語の読みを置き換えます',inline=False)
+        return await ctx.channel.send(embed=embed)
+
+    @dictionary.command(
+        name='add',
+        option=[
+            {
+                "name": "target_word",
+                "required": True
+            },
+            {
+                "name": "replace_word",
+                "required": True
+            }
+        ]
+    )
+    async def add(self, ctx: Context, target_word:str, replace_word:str):
+        dic = await self.getDict(ctx.guild.id)
+        dic[target_word] = replace_word
+        await self.putDict(ctx.guild.id, dic)
+        return await self.bot.sendEmbed(ctx, f"以下を辞書に登録しました。\n`{target_word}=>{replace_word}`")
+    
+    @dictionary.command(
+        name='modify',
+        option=[
+            {
+                "name": "target_word",
+                "required": True
+            },
+            {
+                "name": "replace_word",
+                "required": True
+            }
+        ]
+    )
+    async def modify(self, ctx: Context, target_word:str, replace_word:str):
+        dic = await self.getDict(ctx.guild.id)
+        if target_word not in dic.keys():
+            return await self.bot.sendEmbed(ctx, f"{target_word}は辞書に登録されていません。")
+        dic[target_word] = replace_word
+        await self.putDict(ctx.guild.id, dic)
+        return await self.bot.sendEmbed(ctx, f"以下を辞書に登録しました。\n`{target_word}=>{replace_word}`")
+
+    @dictionary.command(
+        name='remove',
+        option=[
+            {
+                "name": "target_word",
+                "required": True
+            }
+        ]
+    )
+    async def remove(self, ctx: Context, target_word:str):
+        dic = await self.getDict(ctx.guild.id)
+        if target_word not in dic.keys():
+            return await self.bot.sendEmbed(ctx, f"{target_word}は辞書に登録されていません。")
+        past = dic.pop(target_word)
+        await self.putDict(ctx.guild.id, dic)
+        return await self.bot.sendEmbed(ctx, f"以下を辞書から削除しました。\n`{target_word}=>{past}`")
+
+    async def putDict(self, guild_id:int, dic_data:Dict) -> None:
+        data = utils.FileUtil.read_by_guild(guild_id)
+        data['Dictionary'] = dic_data
+        utils.FileUtil.save_by_guild(data, guild_id)
+    
+    async def getDict(self, guild_id:int) -> Dict:
+        return utils.FileUtil.read_by_guild(guild_id).get('Dictionary',{})
+
 async def setup(bot):
+    await bot.add_cog(DictCog(bot))
     await bot.add_cog(TTSCog(bot))
