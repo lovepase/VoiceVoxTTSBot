@@ -92,7 +92,7 @@ def isConnectable(host, port) -> bool:
         return False
     return True
 
-def app_execute(host, port, interval=1.,retries=5):
+def app_execute(host, port, interval=2.,retries=10):
     voicevox_dir = config[environment].get('VOICEVOX_DIR')
     if voicevox_dir is None:
         bot.logger.error('VOICEVOXのパスが設定されていません（VOICEVOXを起動した状態で実行するかconfig.ini に VOICEVOX_DIR = <VOICEVOXのディレクトリ> を設定してください）')
