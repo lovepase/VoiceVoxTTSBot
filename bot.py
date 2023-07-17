@@ -61,7 +61,7 @@ class TTSBot(commands.Bot):
         if type(ctx) == commands.Context:
             return await ctx.send(embed=embed, silent=True, ephemeral=ephemeral)
         else:
-            return await ctx.send(embed=embed, silent=True, ephemeral=ephemeral)
+            return await ctx.send(embed=embed, silent=True)
 
 bot = TTSBot(config=config[environment])
 bot.logger = Logger.logger("TTSBot")
